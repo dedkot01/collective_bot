@@ -12,12 +12,17 @@ from main import engine
 from util import gen_qr_file
 
 
-CHARACTERISTIC = range(1)
+CHARACTERISTIC, AMOUNT_STRENGTH, AMOUNT_AGILITY, AMOUNT_KNOWLEDGE = range(4)
 
 characteristic_keyboard = ReplyKeyboardMarkup([
     ['Сила'],
     ['Ловкость'],
     ['Знание'],
+    ['/cancel'],
+])
+
+nominal_keyboard = ReplyKeyboardMarkup([
+    ['1'],
     ['/cancel'],
 ])
 
@@ -80,10 +85,68 @@ async def choose_characteristic(update: Update, context: ContextTypes.DEFAULT_TY
             return CHARACTERISTIC
 
 
-async def up_characteristic(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    characteristic: str = update.message.text.lower()
+async def amount_characteristic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_chat.id
+    with Session(engine) as session:
+        user = User.get_or_reg(user_id, session)
+        if user.is_admin:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text='Значение?',
+                reply_markup=nominal_keyboard,
+            )
 
-    if characteristic in {'сила', 'ловкость', 'знание'}:
+            characteristic: str = update.message.text.lower()
+            match characteristic:
+                case 'сила':
+                    return AMOUNT_STRENGTH
+                case 'ловкость':
+                    return AMOUNT_AGILITY
+                case 'знание':
+                    return AMOUNT_KNOWLEDGE
+                case _:
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text='Ожидается одна из указанных характеристик: Сила, Ловкость или Знание',
+                        reply_markup=characteristic_keyboard,
+                    )
+
+                    return CHARACTERISTIC
+
+
+async def up_strength(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await up_characteristic(update, context, 'сила')
+    return ConversationHandler.END
+
+
+async def up_agility(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await up_characteristic(update, context, 'ловкость')
+    return ConversationHandler.END
+
+
+async def up_knowledge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await up_characteristic(update, context, 'знание')
+    return ConversationHandler.END
+
+
+async def up_characteristic(update: Update, context: ContextTypes.DEFAULT_TYPE, characteristic: str):
+    amount = update.message.text
+    if not amount.isnumeric():
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text='Ожидается число...',
+            reply_markup=nominal_keyboard,
+        )
+
+        match characteristic:
+            case 'сила':
+                return AMOUNT_STRENGTH
+            case 'ловкость':
+                return AMOUNT_AGILITY
+            case 'знание':
+                return AMOUNT_KNOWLEDGE
+
+    elif characteristic in {'сила', 'ловкость', 'знание'}:
         with Session(engine) as session:
             if characteristic == 'сила':
                 action = 'up_strength'
@@ -94,7 +157,7 @@ async def up_characteristic(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             transaction = Transaction(
                 action=action,
-                amount=1,
+                amount=int(amount),
                 author=str(update.effective_chat.id),
             )
             session.add(transaction)
@@ -113,14 +176,6 @@ async def up_characteristic(update: Update, context: ContextTypes.DEFAULT_TYPE):
         qr_path.unlink(True)
 
         return ConversationHandler.END
-    else:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text='Ожидается одна из указанных характеристик: Сила, Ловкость или Знание',
-            reply_markup=characteristic_keyboard,
-        )
-
-        return CHARACTERISTIC
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -139,7 +194,10 @@ accept_request_admin_role_handler = CallbackQueryHandler(accept_request_admin_ro
 up_characteristic_handler = ConversationHandler(
     entry_points=[MessageHandler(filters.Text('Повысить хар-ку'), choose_characteristic)],
     states={
-        CHARACTERISTIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, up_characteristic)],
+        CHARACTERISTIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, amount_characteristic)],
+        AMOUNT_STRENGTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, up_strength)],
+        AMOUNT_AGILITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, up_agility)],
+        AMOUNT_KNOWLEDGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, up_knowledge)],
     },
     fallbacks=[CommandHandler('cancel', cancel)],
 )
