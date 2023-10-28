@@ -1,8 +1,10 @@
+import telegram
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from sqlalchemy.orm import Session
 
+from models.achievement import Achievement
 from models.transaction import Transaction
 from models.user import User
 from main import engine
@@ -130,11 +132,22 @@ async def achievements(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.commit()
 
         if not user.is_admin:
+            msg: str = "Список достижений:\n"
+            for achievement in Achievement.get_all(session):
+                if achievement in user.achievements:
+                    msg += f"\n<s><b>{achievement.id}. {achievement.description}</b></s>"
+                else:
+                    msg += f"\n<b>{achievement.id}. {achievement.description}</b>"
+                msg += (
+                    f"\nТребуется {achievement.req_strength} силы, {achievement.req_agility} ловкости"
+                    f" и {achievement.req_knowledge} знания"
+                    f"\nНаграда: {achievement.award}"
+                )
+
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=(
-                    'Список доступных достижений:\n'
-                ),
+                text=msg,
+                parse_mode=telegram.constants.ParseMode.HTML,
                 reply_markup=menu_keyboard,
             )
 

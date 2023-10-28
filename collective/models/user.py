@@ -1,11 +1,21 @@
-from typing import Any
+from typing import Any, List
 
 from sqlalchemy import select
-from sqlalchemy.orm import mapped_column
+from sqlalchemy import Column, ForeignKey, Table
+from sqlalchemy.orm import mapped_column, relationship
 from sqlalchemy.orm import Mapped, Session
 from sqlalchemy.types import BigInteger
 
 from models import Base
+from models.achievement import Achievement
+
+
+association_table = Table(
+    "association_table",
+    Base.metadata,
+    Column("left_id", ForeignKey("user.id")),
+    Column("right_id", ForeignKey("achievement.id")),
+)
 
 
 class User(Base):
@@ -17,6 +27,8 @@ class User(Base):
     strength: Mapped[int]
     agility: Mapped[int]
     knowledge: Mapped[int]
+
+    achievements: Mapped[List[Achievement]] = relationship(secondary=association_table)
 
     def __init__(
         self,
