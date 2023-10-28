@@ -92,21 +92,53 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             text=msg_for_user,
                             reply_markup=menu_keyboard,
                         )
-                    elif transaction.action == 'achievement':
-                        user.amount += transaction.amount if transaction.action == 'give' else -transaction.amount
-                        transaction.user = user.id
-                        session.commit()
+                    elif transaction.action == 'give_ach':
+                        achievement = Achievement.get_by_id(session, id_achievement=transaction.amount)
+                        if achievement is None:
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text='❌ ОШИБКА СИСТЕМЫ! Такого достижения не существует, обратитесь к администратору Коллектива',
+                                reply_markup=menu_keyboard,
+                            )
+                        elif achievement in user.achievements:
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text='❌ ОШИБКА! Ранее вы уже получали данное достижение',
+                                reply_markup=menu_keyboard,
+                            )
+                        elif (
+                            (user.strength < achievement.req_strength)
+                            or (user.agility < achievement.req_agility)
+                            or (user.knowledge < achievement.req_knowledge)
+                        ):
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text=(
+                                    '❌ ОШИБКА! Ваших характеристик недостаточно для данного достижение'
+                                    f'\nТребуется {achievement.req_strength} силы, {achievement.req_agility} ловкости'
+                                    f' и {achievement.req_knowledge} знания'
+                                    f'\nУ вас {user.strength} силы, {user.agility} ловкости и {user.knowledge} знания'
+                                ),
+                                reply_markup=menu_keyboard,
+                            )
+                        else:
+                            user.achievements.append(achievement)
+                            transaction.user = user.id
+                            session.commit()
 
-                        await context.bot.send_message(
-                            chat_id=int(transaction.author),
-                            text=f'Пользователь {update.effective_user.first_name} активировал код {transaction.id}',
-                        )
+                            await context.bot.send_message(
+                                chat_id=int(transaction.author),
+                                text=(
+                                    f'Пользователь {update.effective_user.first_name} активировал код {transaction.id}'
+                                    f'\nЕму полагается награда: {achievement.award}'
+                                ),
+                            )
 
-                        await context.bot.send_message(
-                            chat_id=user_id,
-                            text='Получите вашу награду, товарищ!',
-                            reply_markup=menu_keyboard,
-                        )
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text=f'Получите вашу награду, товарищ!\n{achievement.award}',
+                                reply_markup=menu_keyboard,
+                            )
 
 
 async def characteristics(update: Update, context: ContextTypes.DEFAULT_TYPE):

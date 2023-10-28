@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Union
 
 from sqlalchemy import select
 from sqlalchemy.orm import mapped_column
@@ -39,6 +39,11 @@ class Achievement(Base):
         self.req_strength = req_strength
         self.req_agility = req_agility
         self.req_knowledge = req_knowledge
+
+    def get_by_id(session: Session, id_achievement: int) -> Union['Achievement', None]:
+        return session.scalars(
+            select(Achievement).where(Achievement.id == id_achievement)
+        ).one_or_none()
 
     def get_all(session: Session) -> List['Achievement']:
         achievements = session.scalars(

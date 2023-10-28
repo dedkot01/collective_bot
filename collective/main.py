@@ -52,5 +52,6 @@ if __name__ == '__main__':
     application.add_handler(admin.request_admin_role_handler)
     application.add_handler(admin.accept_request_admin_role_handler)
     application.add_handler(admin.up_characteristic_handler)
+    application.add_handler(admin.give_achievement_handler)
 
     application.run_polling()

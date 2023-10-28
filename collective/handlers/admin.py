@@ -1,3 +1,4 @@
+import telegram
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import filters
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler, MessageHandler
@@ -5,6 +6,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, Con
 from sqlalchemy.orm import Session
 
 from config import super_admin_id
+from models.achievement import Achievement
 from models.transaction import Transaction
 from models.user import User
 from handlers.menu import admin_keyboard
@@ -13,6 +15,7 @@ from util import gen_qr_file
 
 
 CHARACTERISTIC, AMOUNT_STRENGTH, AMOUNT_AGILITY, AMOUNT_KNOWLEDGE = range(4)
+ACHIEVEMENT = range(1)
 
 characteristic_keyboard = ReplyKeyboardMarkup([
     ['Сила'],
@@ -26,6 +29,11 @@ nominal_keyboard = ReplyKeyboardMarkup([
     ['/cancel'],
 ])
 
+ids_achievement_keyboard = ReplyKeyboardMarkup([
+    ['1', '2', '3', '4'],
+    ['5', '6', '7', '8'],
+    ['/cancel'],
+])
 
 async def request_admin_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_chat.id
@@ -169,13 +177,89 @@ async def up_characteristic(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
             photo=qr_path,
-            caption=f'Транзакция повышения характеристики "{characteristic.upper()}": {transaction.amount}',
+            caption=(
+                f'Транзакция повышения характеристики "{characteristic.upper()}": {transaction.amount}'
+                f'\nИдентификатор: {transaction.id}'
+            ),
             reply_markup=admin_keyboard,
         )
 
         qr_path.unlink(True)
 
         return ConversationHandler.END
+
+
+async def give_achievement(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_chat.id
+    with Session(engine) as session:
+        user = User.get_or_reg(user_id, session)
+        if user.is_admin:
+            msg: str = "Список достижений:\n"
+            for achievement in Achievement.get_all(session):
+                msg += (
+                    f"\n<b>{achievement.id}. {achievement.description}</b>"
+                    f"\nТребуется {achievement.req_strength} силы, {achievement.req_agility} ловкости"
+                    f" и {achievement.req_knowledge} знания"
+                    f"\nНаграда: {achievement.award}"
+                )
+            msg += "Какое достижение выдать?"
+
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=msg,
+                parse_mode=telegram.constants.ParseMode.HTML,
+                reply_markup=ids_achievement_keyboard,
+            )
+            return ACHIEVEMENT
+
+
+async def confirm_achievement(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_chat.id
+    with Session(engine) as session:
+        user = User.get_or_reg(user_id, session)
+        if user.is_admin:
+            try:
+                id_achievement = int(update.message.text)
+            except Exception:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="❌ ОШИБКА! Ожидается число",
+                    reply_markup=ids_achievement_keyboard,
+                )
+                return ACHIEVEMENT
+            
+            if id_achievement not in map(lambda x: x.id, Achievement.get_all(session)):
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="❌ ОШИБКА! Такого достижения не существует",
+                    reply_markup=ids_achievement_keyboard,
+                )
+                return ACHIEVEMENT
+            
+            transaction = Transaction(
+                action="give_ach",
+                amount=id_achievement,
+                author=str(update.effective_chat.id),
+            )
+            session.add(transaction)
+            session.commit()
+            session.refresh(transaction)
+
+            qr_path = gen_qr_file(f't.me/collective_wings_bot?start={transaction.id}')
+
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=qr_path,
+                caption=(
+                    f'Транзакция подтверждения достижения {id_achievement}'
+                    f'\nИдентификатор: {transaction.id}'
+                ),
+                reply_markup=admin_keyboard,
+            )
+
+            qr_path.unlink(True)
+
+            return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -198,6 +282,13 @@ up_characteristic_handler = ConversationHandler(
         AMOUNT_STRENGTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, up_strength)],
         AMOUNT_AGILITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, up_agility)],
         AMOUNT_KNOWLEDGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, up_knowledge)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel)],
+)
+give_achievement_handler = ConversationHandler(
+    entry_points=[MessageHandler(filters.Text('Подтвердить достижение'), give_achievement)],
+    states={
+        ACHIEVEMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_achievement)],
     },
     fallbacks=[CommandHandler('cancel', cancel)],
 )
