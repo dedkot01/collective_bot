@@ -11,8 +11,7 @@ from main import engine
 
 
 menu_keyboard = ReplyKeyboardMarkup([
-    ['Характеристики'],
-    ['Достижения'],
+    ['📊 Характеристики 📊'],
 ])
 
 admin_keyboard = ReplyKeyboardMarkup([
@@ -71,27 +70,48 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if transaction.action in ['up_strength', 'up_agility', 'up_knowledge']:
                         if transaction.action == 'up_strength':
                             user.strength += transaction.amount
-                            msg_for_user = f'Поздравляем, товарищ! Ваша сила возросла на {transaction.amount}'
+                            msg_for_user = f'Поздравляем, товарищ! Ваша сила 💪 возросла на {transaction.amount}'
                         elif transaction.action == 'up_agility':
                             user.agility += transaction.amount
-                            msg_for_user = f'Поздравляем, товарищ! Ваша ловкость возросла на {transaction.amount}'
+                            msg_for_user = f'Поздравляем, товарищ! Ваша ловкость 🤸‍♀️ возросла на {transaction.amount}'
                         elif transaction.action == 'up_knowledge':
                             user.knowledge += transaction.amount
-                            msg_for_user = f'Поздравляем, товарищ! Ваши знания выросли на {transaction.amount}'
+                            msg_for_user = f'Поздравляем, товарищ! Ваши знания 📚 выросли на {transaction.amount}'
 
                         transaction.user = user.id
                         session.commit()
-
-                        await context.bot.send_message(
-                            chat_id=int(transaction.author),
-                            text=f'Пользователь {update.effective_user.first_name} активировал код {transaction.id}',
-                        )
 
                         await context.bot.send_message(
                             chat_id=user_id,
                             text=msg_for_user,
                             reply_markup=menu_keyboard,
                         )
+
+                        await context.bot.send_message(
+                            chat_id=int(transaction.author),
+                            text=f'Пользователь {update.effective_user.first_name} активировал код {transaction.id}',
+                        )
+
+                        achievements = Achievement.get_all(session)
+                        for achievement in achievements:
+                            if (
+                                (achievement not in user.knowed_achievements)
+                                and (user.strength >= achievement.req_strength)
+                                and (user.agility >= achievement.req_agility)
+                                and (user.knowledge >= achievement.req_knowledge)
+                            ):
+                                user.knowed_achievements.append(achievement)
+                                session.commit()
+
+                                await context.bot.send_message(
+                                    chat_id=user_id,
+                                    text=(
+                                        f'Товарищ! Вы получаете 📜 талон 📜 <b>"{achievement.description}"</b>\n'
+                                        f'Вы можете обменять его в баре на {achievement.award}'
+                                    ),
+                                    parse_mode=telegram.constants.ParseMode.HTML,
+                                    reply_markup=menu_keyboard,
+                                )
                     elif transaction.action == 'give_ach':
                         achievement = Achievement.get_by_id(session, id_achievement=transaction.amount)
                         if achievement is None:
@@ -114,9 +134,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             await context.bot.send_message(
                                 chat_id=user_id,
                                 text=(
-                                    '❌ ОШИБКА! Ваших характеристик недостаточно для данного достижение'
-                                    f'\nТребуется {achievement.req_strength} силы, {achievement.req_agility} ловкости'
-                                    f' и {achievement.req_knowledge} знания'
+                                    '❌ ОШИБКА! Ваших характеристик недостаточно для данного достижение\n'
+                                    f'\nТребуется {achievement.req_strength} силы 💪, {achievement.req_agility} ловкости 🤸‍♀️'
+                                    f' и {achievement.req_knowledge} знания 📚'
                                     f'\nУ вас {user.strength} силы, {user.agility} ловкости и {user.knowledge} знания'
                                 ),
                                 reply_markup=menu_keyboard,
@@ -130,13 +150,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 chat_id=int(transaction.author),
                                 text=(
                                     f'Пользователь {update.effective_user.first_name} активировал код {transaction.id}'
-                                    f'\nЕму полагается награда: {achievement.award}'
+                                    f'\n⭐️ Ему полагается награда: {achievement.award}'
                                 ),
                             )
 
                             await context.bot.send_message(
                                 chat_id=user_id,
-                                text=f'Получите вашу награду, товарищ!\n{achievement.award}',
+                                text=f'⭐️ Получите вашу награду, товарищ!\n{achievement.award}',
                                 reply_markup=menu_keyboard,
                             )
 
@@ -158,32 +178,5 @@ async def characteristics(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 
-async def achievements(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    with Session(engine) as session:
-        user: User = User.get_or_reg(update.effective_chat.id, session)
-        session.commit()
-
-        if not user.is_admin:
-            msg: str = "Список достижений:\n"
-            for achievement in Achievement.get_all(session):
-                if achievement in user.achievements:
-                    msg += f"\n<s><b>{achievement.id}. {achievement.description}</b></s>"
-                else:
-                    msg += f"\n<b>{achievement.id}. {achievement.description}</b>"
-                msg += (
-                    f"\nТребуется {achievement.req_strength} силы, {achievement.req_agility} ловкости"
-                    f" и {achievement.req_knowledge} знания"
-                    f"\nНаграда: {achievement.award}"
-                )
-
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=msg,
-                parse_mode=telegram.constants.ParseMode.HTML,
-                reply_markup=menu_keyboard,
-            )
-
-
 start_handler = CommandHandler('start', start)
-characteristics_handler = MessageHandler(filters.Text('Характеристики'), characteristics)
-achievements_handler = MessageHandler(filters.Text('Достижения'), achievements)
+characteristics_handler = MessageHandler(filters.Text('📊 Характеристики 📊'), characteristics)

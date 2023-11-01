@@ -10,8 +10,14 @@ from models import Base
 from models.achievement import Achievement
 
 
-association_table = Table(
-    "association_table",
+association_main_table = Table(
+    "association_main_table",
+    Base.metadata,
+    Column("left_id", ForeignKey("user.id")),
+    Column("right_id", ForeignKey("achievement.id")),
+)
+association_knowed_table = Table(
+    "association_knowed_table",
     Base.metadata,
     Column("left_id", ForeignKey("user.id")),
     Column("right_id", ForeignKey("achievement.id")),
@@ -28,7 +34,8 @@ class User(Base):
     agility: Mapped[int]
     knowledge: Mapped[int]
 
-    achievements: Mapped[List[Achievement]] = relationship(secondary=association_table)
+    achievements: Mapped[List[Achievement]] = relationship(secondary=association_main_table)
+    knowed_achievements: Mapped[List[Achievement]] = relationship(secondary=association_knowed_table)
 
     def __init__(
         self,

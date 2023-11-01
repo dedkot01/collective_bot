@@ -25,7 +25,7 @@ characteristic_keyboard = ReplyKeyboardMarkup([
 ])
 
 nominal_keyboard = ReplyKeyboardMarkup([
-    ['1'],
+    ['1', '2'],
     ['/cancel'],
 ])
 
@@ -86,7 +86,7 @@ async def choose_characteristic(update: Update, context: ContextTypes.DEFAULT_TY
         if user.is_admin:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text='Какую характеристику повысить?',
+                text='📊 Какую характеристику повысить?',
                 reply_markup=characteristic_keyboard,
             )
 
@@ -194,10 +194,10 @@ async def give_achievement(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with Session(engine) as session:
         user = User.get_or_reg(user_id, session)
         if user.is_admin:
-            msg: str = "Список достижений:\n"
+            msg: str = "⭐️ Список достижений:"
             for achievement in Achievement.get_all(session):
                 msg += (
-                    f"\n<b>{achievement.id}. {achievement.description}</b>"
+                    f"\n\n<b>{achievement.id}. {achievement.description}</b>"
                     f"\nТребуется {achievement.req_strength} силы, {achievement.req_agility} ловкости"
                     f" и {achievement.req_knowledge} знания"
                     f"\nНаграда: {achievement.award}"
